@@ -1031,11 +1031,194 @@ make rebuild-auth
 make rebuild-api-read
 ```
 
-#### ❌ Token JWT inválido ou expirado
+#### ❌ Token JWT não é validado pelas APIs (INVALID_TOKEN)
 
 **Sintomas:**
 - Requisições retornam 401 Unauthorized
-- Erro: "Invalid or expired token"
+- Erro: `"Token malformado ou inválido"` ou `"INVALID_TOKEN"`
+- Token foi gerado com sucesso pelo Auth Service
+- Mesmo tokens recém-gerados não funcionam
+
+**Causa Raiz:**
+As APIs (`fiap-pos-tech-api` e `fiap-pos-tech-api-read`) não conseguem validar os tokens JWT porque não conseguem acessar o endpoint JWKS do Keycloak para obter as chaves públicas necessárias para verificar a assinatura do token.
+
+**Diagnóstico Passo a Passo:**
+
+**1. Verificar se Keycloak está rodando e acessível:**
+```bash
+# Verificar se container está rodando
+docker ps | grep keycloak
+
+# Testar health endpoint
+curl http://localhost:8080/health/ready
+
+# Testar JWKS endpoint (chaves públicas)
+curl http://localhost:8080/realms/fiap-pos-tech/protocol/openid-connect/certs
+# Deve retornar JSON com "keys": [...]
+```
+
+**2. Verificar conectividade de dentro das APIs:**
+```bash
+# Testar de dentro da Main API
+docker exec fiap-pos-tech-api-dev curl -s http://fiap-keycloak:8080/health/ready
+
+# Testar JWKS de dentro da Main API
+docker exec fiap-pos-tech-api-dev \
+  curl -s http://fiap-keycloak:8080/realms/fiap-pos-tech/protocol/openid-connect/certs
+
+# Testar de dentro da Read API
+docker exec fiap-pos-tech-api-read-dev curl -s http://fiap-keycloak:8080/health/ready
+
+# Se retornar erro ou vazio, há problema de conectividade
+```
+
+**3. Verificar configurações de KEYCLOAK_URL:**
+```bash
+# Main API - DEVE usar nome do container Docker
+cat fiap-pos-tech-api/.env | grep KEYCLOAK
+
+# Esperado:
+# KEYCLOAK_URL=http://fiap-keycloak:8080
+# KEYCLOAK_REALM=fiap-pos-tech
+# KEYCLOAK_CLIENT_ID=pos-tech-api
+
+# Read API - DEVE usar nome do container Docker
+cat fiap-pos-tech-api-read/.env | grep KEYCLOAK
+
+# Esperado:
+# KEYCLOAK_URL=http://fiap-keycloak:8080
+# KEYCLOAK_REALM=fiap-pos-tech
+# KEYCLOAK_CLIENT_ID=pos-tech-api
+```
+
+**4. Verificar se todos estão na mesma rede Docker:**
+```bash
+# Verificar rede
+make network-status
+
+# OU mais detalhado:
+docker network inspect fiap-pos-tech-network | grep -A 5 "Containers"
+
+# DEVE listar TODOS estes containers:
+# - fiap-keycloak
+# - fiap-pos-tech-api-dev
+# - fiap-pos-tech-api-read-dev
+# - fiap-pos-tech-auth-dev
+# - fiap-pos-tech-api-db
+# - fiap-pos-tech-api-read-db
+# - keycloak-postgres
+```
+
+**5. Verificar logs das APIs para erros:**
+```bash
+# Logs da Main API (procurar erros de JWKS ou autenticação)
+make logs-api | grep -i "error\|jwks\|keycloak\|auth"
+
+# Logs da Read API
+make logs-api-read | grep -i "error\|jwks\|keycloak\|auth"
+
+# Procure por erros como:
+# - "Error fetching signing key"
+# - "ECONNREFUSED"
+# - "getaddrinfo ENOTFOUND"
+```
+
+**Solução:**
+
+**Opção 1: Reiniciar na ordem correta (Mais Comum)**
+```bash
+# Parar todos os serviços
+make down-all
+
+# Iniciar Auth (Keycloak) primeiro e AGUARDAR
+make up-auth
+echo "Aguardando Keycloak inicializar completamente (90 segundos)..."
+sleep 90
+
+# Verificar se Keycloak está pronto ANTES de continuar
+curl http://localhost:8080/health/ready
+curl http://localhost:8080/realms/fiap-pos-tech/protocol/openid-connect/certs
+
+# Se os comandos acima funcionaram, continue:
+make up-api
+make up-api-read
+
+# Aguardar APIs inicializarem
+sleep 10
+```
+
+**Opção 2: Usar o script automatizado**
+```bash
+make down-all
+./setup-network.sh
+# Escolha opção "s" para iniciar automaticamente
+```
+
+**Opção 3: Corrigir configurações e reiniciar**
+```bash
+# Se KEYCLOAK_URL estiver incorreto, edite os .env:
+nano fiap-pos-tech-api/.env
+# Altere para: KEYCLOAK_URL=http://fiap-keycloak:8080
+
+nano fiap-pos-tech-api-read/.env
+# Altere para: KEYCLOAK_URL=http://fiap-keycloak:8080
+
+# Reinicie as APIs
+make down-api
+make down-api-read
+make up-api
+make up-api-read
+```
+
+**Teste End-to-End após correção:**
+```bash
+# 1. Registrar usuário (se ainda não existir)
+curl -X POST http://localhost:3002/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "cpf": "12345678901",
+    "password": "SenhaForte123",
+    "email": "teste@example.com",
+    "firstName": "Teste",
+    "lastName": "Usuario"
+  }'
+
+# 2. Fazer login e capturar o token
+TOKEN=$(curl -s -X POST http://localhost:3002/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"cpf": "12345678901", "password": "SenhaForte123"}' \
+  | jq -r '.data.accessToken')
+
+# 3. Verificar se token foi obtido
+echo "Token obtido: ${TOKEN:0:50}..."
+
+# 4. Testar Main API com o token (deve retornar dados, não erro)
+curl -X GET http://localhost:3001/api/v1/customers \
+  -H "Authorization: Bearer $TOKEN"
+
+# 5. Testar Read API com o token (deve retornar dados, não erro)
+curl -X GET http://localhost:3003/api/v1/vehicles \
+  -H "Authorization: Bearer $TOKEN"
+
+# Se ambos retornarem JSON com "success": true, o problema foi resolvido!
+```
+
+**Checklist de Verificação:**
+- [ ] Keycloak está rodando: `docker ps | grep keycloak`
+- [ ] Keycloak health OK: `curl http://localhost:8080/health/ready`
+- [ ] JWKS acessível: `curl http://localhost:8080/realms/fiap-pos-tech/protocol/openid-connect/certs`
+- [ ] APIs conseguem acessar Keycloak internamente (comandos `docker exec` acima)
+- [ ] Todos containers na rede: `make network-status`
+- [ ] KEYCLOAK_URL correto nos .env: `http://fiap-keycloak:8080`
+- [ ] Aguardou 90+ segundos após iniciar Keycloak
+- [ ] Token foi testado imediatamente após ser gerado (não expirado)
+
+#### ❌ Token JWT expirado
+
+**Sintomas:**
+- Requisições retornam 401 Unauthorized
+- Erro: "Token expirado" ou "TokenExpiredError"
+- Token funcionou antes mas parou de funcionar
 
 **Solução:**
 ```bash
@@ -1047,13 +1230,15 @@ curl -X POST http://localhost:3002/auth/login \
     "password": "SenhaForte123"
   }'
 
-# 2. Ou use o refresh token
+# 2. Ou use o refresh token (válido por 7 dias)
 curl -X POST http://localhost:3002/auth/refresh \
   -H "Content-Type: application/json" \
   -d '{
     "refreshToken": "seu_refresh_token_aqui"
   }'
 ```
+
+**Nota:** Tokens de acesso expiram após 1 hora por padrão. Use refresh tokens para renovar sem fazer login novamente.
 
 ### Comandos de Diagnóstico
 
@@ -1673,20 +1858,78 @@ docker system prune -a --volumes
 
 ### FAQ - Perguntas Frequentes
 
+#### 🔧 Configuração e Setup
+
 **Q: Qual a ordem correta para iniciar os serviços?**
 A: Auth (Keycloak) → Main API → Read API. Use `./setup-network.sh` para automático.
 
 **Q: Por que o Keycloak demora tanto para iniciar?**
 A: Keycloak leva ~60-90s para inicializar completamente, especialmente na primeira vez.
 
-**Q: Posso rodar apenas um serviço?**
-A: Sim, mas o Auth (Keycloak) é dependência obrigatória para autenticação JWT.
-
 **Q: Como limpo tudo e começo do zero?**
 A: Execute `make reset` e depois `make setup-all && ./setup-network.sh`
 
 **Q: Os serviços compartilham o mesmo banco em produção?**
 A: Não! Cada serviço tem seu banco independente, tanto em dev quanto em produção.
+
+#### 🔐 Autenticação e JWT
+
+**Q: Estou recebendo "Token malformado ou inválido" nas APIs. O que fazer?**
+A: Este é um problema comum de conectividade. Siga estes passos:
+
+```bash
+# 1. Verifique se o Keycloak está rodando
+docker ps | grep keycloak
+
+# 2. Teste conectividade INTERNA (dentro do container da API)
+docker exec -it fiap-pos-tech-api-dev sh -c \
+  "apk add curl && curl -s http://fiap-keycloak:8080/realms/fiap-pos-tech/protocol/openid-connect/certs"
+
+# 3. Se falhar, reinicie na ordem correta
+make down-all
+./setup-network.sh  # Escolha opção automática (s)
+
+# 4. Aguarde 90 segundos e teste novamente
+```
+
+**Causa raiz**: As APIs não conseguem acessar o endpoint JWKS do Keycloak para validar tokens.
+
+**Q: Meu token JWT expirou. Como gerar um novo?**
+A: Faça login novamente na API de autenticação:
+
+```bash
+curl -X POST http://localhost:3002/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"cpf": "SEU_CPF", "password": "SUA_SENHA"}'
+```
+
+Tokens JWT têm duração de 1 hora por padrão.
+
+**Q: Como testo se a validação JWT está funcionando?**
+A: Use este fluxo completo:
+
+```bash
+# 1. Obtenha um token
+TOKEN=$(curl -s -X POST http://localhost:3002/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"cpf": "12345678901", "password": "SenhaForte123"}' \
+  | jq -r '.access_token')
+
+# 2. Teste na Main API
+curl -i http://localhost:3000/api/vehicles/sales \
+  -H "Authorization: Bearer $TOKEN"
+
+# 3. Teste na Read API
+curl -i http://localhost:3001/api/vehicles \
+  -H "Authorization: Bearer $TOKEN"
+
+# 4. Se ambos retornarem 200, está funcionando!
+```
+
+#### 🚀 Desenvolvimento
+
+**Q: Posso rodar apenas um serviço?**
+A: Sim, mas o Auth (Keycloak) é dependência obrigatória para autenticação JWT.
 
 **Q: Como atualizo as dependências dos serviços?**
 A: Entre no container (`make shell-api`) e execute `npm install` ou rebuilde com `make rebuild-api`
