@@ -26,7 +26,7 @@ echo "================================================"
 echo ""
 echo "1. fiap-pos-tech-auth (Keycloak + Auth Service)"
 echo "2. fiap-pos-tech-api (Main API)"
-echo "3. fiap-pos-tech-api-read (Read API)"
+echo "3. fiap-pos-tech-api-sale (Read API)"
 echo ""
 
 # Verificar se deve iniciar automaticamente
@@ -55,7 +55,7 @@ if [[ $REPLY =~ ^[Ss]$ ]]; then
     echo ""
     echo "📖 Iniciando Read API..."
     echo "================================================"
-    cd fiap-pos-tech-api-read
+    cd fiap-pos-tech-api-sale
     docker compose --profile dev up -d
     cd ..
     
@@ -80,7 +80,7 @@ else
     echo "1. cd fiap-pos-tech-auth && docker compose --profile dev up -d"
     echo "2. Aguarde ~60s para Keycloak ficar pronto"
     echo "3. cd ../fiap-pos-tech-api && docker compose --profile dev up -d"
-    echo "4. cd ../fiap-pos-tech-api-read && docker compose --profile dev up -d"
+    echo "4. cd ../fiap-pos-tech-api-sale && docker compose --profile dev up -d"
     echo ""
 fi
 
@@ -91,5 +91,5 @@ echo ""
 echo "🛑 Para parar todos os serviços:"
 echo "   cd fiap-pos-tech-auth && docker compose --profile dev down"
 echo "   cd ../fiap-pos-tech-api && docker compose --profile dev down"
-echo "   cd ../fiap-pos-tech-api-read && docker compose --profile dev down"
+echo "   cd ../fiap-pos-tech-api-sale && docker compose --profile dev down"
 echo "================================================"
