@@ -37,6 +37,7 @@ make health-all
 
 Todas as rotas (exceto `/health`) requerem JWT Bearer token.
 
+**Solução:**
 ```bash
 # Register
 POST http://localhost:3002/auth/register
