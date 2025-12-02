@@ -2,7 +2,7 @@
 	network-create network-remove network-status \
 	setup-auth up-auth down-auth logs-auth shell-auth build-auth rebuild-auth \
 	setup-api up-api down-api logs-api shell-api build-api rebuild-api migrate-api seed-api studio-api test-api \
-	setup-api-read up-api-read down-api-read logs-api-read shell-api-read build-api-read rebuild-api-read \
+	setup-api-sale up-api-sale down-api-sale logs-api-sale shell-api-sale build-api-sale rebuild-api-sale \
 	setup-all up-all down-all logs-all status-all health-all \
 	shell-db shell-keycloak-db
 
@@ -15,12 +15,12 @@ NC := \033[0m # No Color
 
 # Repository URLs
 API_REPO := https://github.com/jhonataneduardo/fiap-pos-tech-api.git
-API_READ_REPO := https://github.com/jhonataneduardo/fiap-pos-tech-api-read.git
+API_SALE_REPO := https://github.com/jhonataneduardo/fiap-pos-tech-api-sale.git
 AUTH_REPO := https://github.com/jhonataneduardo/fiap-pos-tech-auth.git
 
 # Directories
 API_DIR := fiap-pos-tech-api
-API_READ_DIR := fiap-pos-tech-api-read
+API_SALE_DIR := fiap-pos-tech-api-sale
 AUTH_DIR := fiap-pos-tech-auth
 
 # Network name
@@ -42,7 +42,7 @@ help: ## 📋 Display this help message
 	@echo "$(YELLOW)🏗️  Arquitetura: Microserviços Independentes$(NC)"
 	@echo "   • fiap-pos-tech-auth (Keycloak + Auth Service)"
 	@echo "   • fiap-pos-tech-api (Main API + PostgreSQL)"
-	@echo "   • fiap-pos-tech-api-read (Read API + PostgreSQL)"
+	@echo "   • fiap-pos-tech-api-sale (Sale API + PostgreSQL)"
 	@echo ""
 	@awk 'BEGIN {FS = ":.*##"; printf "Usage:\n  make $(YELLOW)<target>$(NC)\n\n"} /^[a-zA-Z_-]+:.*?##/ { printf "  $(GREEN)%-25s$(NC) %s\n", $$1, $$2 } /^##@/ { printf "\n$(BLUE)%s$(NC)\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
 	@echo ""
@@ -65,11 +65,11 @@ clone: ## 📦 Clone all repositories
 		git clone $(API_REPO) $(API_DIR); \
 		echo "$(GREEN)✅ API repository cloned successfully!$(NC)"; \
 	fi
-	@if [ -d "$(API_READ_DIR)" ]; then \
-		echo "$(YELLOW)⚠️  $(API_READ_DIR) already exists. Skipping clone.$(NC)"; \
+	@if [ -d "$(API_SALE_DIR)" ]; then \
+		echo "$(YELLOW)⚠️  $(API_SALE_DIR) already exists. Skipping clone.$(NC)"; \
 	else \
-		echo "$(GREEN)📥 Cloning $(API_READ_REPO)...$(NC)"; \
-		git clone $(API_READ_REPO) $(API_READ_DIR); \
+		echo "$(GREEN)📥 Cloning $(API_SALE_REPO)...$(NC)"; \
+		git clone $(API_SALE_REPO) $(API_SALE_DIR); \
 		echo "$(GREEN)✅ API Read repository cloned successfully!$(NC)"; \
 	fi
 	@echo "$(GREEN)✨ All repositories are ready!$(NC)"
@@ -84,9 +84,9 @@ check-env: ## 🔍 Check if .env files exist in all services
 		echo "$(YELLOW)💡 Creating $(API_DIR)/.env from .env.example...$(NC)"; \
 		cp $(API_DIR)/.env.example $(API_DIR)/.env 2>/dev/null || echo "$(RED)❌ .env.example not found in $(API_DIR)$(NC)"; \
 	fi
-	@if [ -d "$(API_READ_DIR)" ] && [ ! -f "$(API_READ_DIR)/.env" ]; then \
-		echo "$(YELLOW)💡 Creating $(API_READ_DIR)/.env from .env.example...$(NC)"; \
-		cp $(API_READ_DIR)/.env.example $(API_READ_DIR)/.env 2>/dev/null || echo "$(RED)❌ .env.example not found in $(API_READ_DIR)$(NC)"; \
+	@if [ -d "$(API_SALE_DIR)" ] && [ ! -f "$(API_SALE_DIR)/.env" ]; then \
+		echo "$(YELLOW)💡 Creating $(API_SALE_DIR)/.env from .env.example...$(NC)"; \
+		cp $(API_SALE_DIR)/.env.example $(API_SALE_DIR)/.env 2>/dev/null || echo "$(RED)❌ .env.example not found in $(API_SALE_DIR)$(NC)"; \
 	fi
 	@echo "$(GREEN)✅ Environment files checked!$(NC)"
 
@@ -96,7 +96,7 @@ setup: clone check-env network-create ## 🛠️  Complete setup (clone + env + 
 	@echo "$(YELLOW)💡 Next steps:$(NC)"
 	@echo "   1. Review .env files in each service directory"
 	@echo "   2. Run 'make setup-all' to initialize all services"
-	@echo "   3. Or use 'make setup-auth', 'make setup-api', 'make setup-api-read' individually"
+	@echo "   3. Or use 'make setup-auth', 'make setup-api', 'make setup-api-sale' individually"
 	@echo "   4. Run './setup-network.sh' for automated startup"
 
 ##@ Network Management
@@ -154,6 +154,22 @@ rebuild-auth: ## 🔄 Rebuild Auth service from scratch
 	@cd $(AUTH_DIR) && $(DOCKER_COMPOSE) build --no-cache
 	@echo "$(GREEN)✅ Rebuild completed!$(NC)"
 
+test-auth: ## 🧪 Run Auth Service tests
+	@echo "$(BLUE)🧪 Running Auth Service tests...$(NC)"
+	@cd $(AUTH_DIR) && $(DOCKER_COMPOSE) exec fiap-pos-tech-auth-dev npm test
+
+lint-auth: ## 🔍 Run linter on Auth Service
+	@echo "$(BLUE)🔍 Running linter...$(NC)"
+	@cd $(AUTH_DIR) && $(DOCKER_COMPOSE) exec fiap-pos-tech-auth-dev npm run lint
+
+lint-fix-auth: ## 🔧 Fix linter issues in Auth Service
+	@echo "$(BLUE)🔧 Fixing linter issues...$(NC)"
+	@cd $(AUTH_DIR) && $(DOCKER_COMPOSE) exec fiap-pos-tech-auth-dev npm run lint:fix
+
+coverage-auth: ## 📊 Generate test coverage for Auth Service
+	@echo "$(BLUE)📊 Generating test coverage...$(NC)"
+	@cd $(AUTH_DIR) && $(DOCKER_COMPOSE) exec fiap-pos-tech-auth-dev npm run test:coverage
+
 ##@ Main API Service (fiap-pos-tech-api)
 
 setup-api: ## 🗄️  Setup Main API service (build)
@@ -198,57 +214,70 @@ migrate-api: ## 🗄️  Run database migrations for Main API
 
 seed-api: ## 🌱 Seed Main API database
 	@echo "$(BLUE)🌱 Seeding database...$(NC)"
-	@cd $(API_DIR) && $(DOCKER_COMPOSE) exec fiap-pos-tech-api-dev npm run prisma:seed
+	@cd $(API_DIR) && $(DOCKER_COMPOSE) exec fiap-pos-tech-api-dev npm run db:seed:dev
 	@echo "$(GREEN)✅ Database seeded!$(NC)"
 
 studio-api: ## 🎨 Open Prisma Studio for Main API
 	@echo "$(BLUE)🎨 Opening Prisma Studio...$(NC)"
-	@cd $(API_DIR) && $(DOCKER_COMPOSE) exec fiap-pos-tech-api-dev npm run prisma:studio
+	@cd $(API_DIR) && $(DOCKER_COMPOSE) exec fiap-pos-tech-api-dev npx prisma studio
 
 test-api: ## 🧪 Run Main API tests
 	@echo "$(BLUE)🧪 Running tests...$(NC)"
 	@cd $(API_DIR) && $(DOCKER_COMPOSE) exec fiap-pos-tech-api-dev npm test
 
-##@ Read API Service (fiap-pos-tech-api-read)
+##@ Sale API Service (fiap-pos-tech-api-sale)
 
-setup-api-read: ## 📖 Setup Read API service (build)
-	@echo "$(BLUE)📖 Setting up Read API service...$(NC)"
-	@cd $(API_READ_DIR) && $(DOCKER_COMPOSE) build
-	@echo "$(GREEN)✅ Read API service ready!$(NC)"
+setup-api-sale: ## 📖 Setup Sale API service (build)
+	@echo "$(BLUE)📖 Setting up Sale API service...$(NC)"
+	@cd $(API_SALE_DIR) && $(DOCKER_COMPOSE) build
+	@echo "$(GREEN)✅ Sale API service ready!$(NC)"
 
-up-api-read: network-create ## 🚀 Start Read API service (API + PostgreSQL)
-	@echo "$(BLUE)🚀 Starting Read API service...$(NC)"
-	@cd $(API_READ_DIR) && $(DOCKER_COMPOSE) --profile dev up -d
-	@echo "$(GREEN)✅ Read API service started!$(NC)"
-	@echo "$(YELLOW)💡 Read API: http://localhost:3003$(NC)"
+up-api-sale: network-create ## 🚀 Start Sale API service (API + PostgreSQL)
+	@echo "$(BLUE)🚀 Starting Sale API service...$(NC)"
+	@cd $(API_SALE_DIR) && $(DOCKER_COMPOSE) --profile dev up -d
+	@echo "$(GREEN)✅ Sale API service started!$(NC)"
+	@echo "$(YELLOW)💡 Sale API: http://localhost:3003$(NC)"
 	@echo "$(YELLOW)💡 Swagger: http://localhost:3003/api-docs$(NC)"
 
-down-api-read: ## 🛑 Stop Read API service
-	@echo "$(BLUE)🛑 Stopping Read API service...$(NC)"
-	@cd $(API_READ_DIR) && $(DOCKER_COMPOSE) --profile dev down
-	@echo "$(GREEN)✅ Read API service stopped!$(NC)"
+down-api-sale: ## 🛑 Stop Sale API service
+	@echo "$(BLUE)🛑 Stopping Sale API service...$(NC)"
+	@cd $(API_SALE_DIR) && $(DOCKER_COMPOSE) --profile dev down
+	@echo "$(GREEN)✅ Sale API service stopped!$(NC)"
 
-logs-api-read: ## 📋 Show Read API logs
-	@echo "$(BLUE)📋 Read API logs:$(NC)"
-	@cd $(API_READ_DIR) && $(DOCKER_COMPOSE) logs -f fiap-pos-tech-api-read-dev
+logs-api-sale: ## 📋 Show Sale API logs
+	@echo "$(BLUE)📋 Sale API logs:$(NC)"
+	@cd $(API_SALE_DIR) && $(DOCKER_COMPOSE) logs -f fiap-pos-tech-api-sale-dev
 
-shell-api-read: ## 💻 Access Read API container shell
-	@echo "$(BLUE)💻 Accessing Read API container...$(NC)"
-	@cd $(API_READ_DIR) && $(DOCKER_COMPOSE) exec fiap-pos-tech-api-read-dev sh
+shell-api-sale: ## 💻 Access Sale API container shell
+	@echo "$(BLUE)💻 Accessing Sale API container...$(NC)"
+	@cd $(API_SALE_DIR) && $(DOCKER_COMPOSE) exec fiap-pos-tech-api-sale-dev sh
 
-build-api-read: ## 🔨 Build Read API service
-	@echo "$(BLUE)🔨 Building Read API service...$(NC)"
-	@cd $(API_READ_DIR) && $(DOCKER_COMPOSE) build
+build-api-sale: ## 🔨 Build Sale API service
+	@echo "$(BLUE)🔨 Building Sale API service...$(NC)"
+	@cd $(API_SALE_DIR) && $(DOCKER_COMPOSE) build
 	@echo "$(GREEN)✅ Build completed!$(NC)"
 
-rebuild-api-read: ## 🔄 Rebuild Read API service from scratch
-	@echo "$(BLUE)🔄 Rebuilding Read API service...$(NC)"
-	@cd $(API_READ_DIR) && $(DOCKER_COMPOSE) build --no-cache
+rebuild-api-sale: ## 🔄 Rebuild Sale API service from scratch
+	@echo "$(BLUE)🔄 Rebuilding Sale API service...$(NC)"
+	@cd $(API_SALE_DIR) && $(DOCKER_COMPOSE) build --no-cache
 	@echo "$(GREEN)✅ Rebuild completed!$(NC)"
+
+migrate-api-sale: ## 🗄️  Run database migrations for Sale API
+	@echo "$(BLUE)🗄️  Running database migrations...$(NC)"
+	@cd $(API_SALE_DIR) && $(DOCKER_COMPOSE) exec fiap-pos-tech-api-sale-dev npx prisma migrate dev
+	@echo "$(GREEN)✅ Migrations completed!$(NC)"
+
+studio-api-sale: ## 🎨 Open Prisma Studio for Sale API
+	@echo "$(BLUE)🎨 Opening Prisma Studio for Sale API...$(NC)"
+	@cd $(API_SALE_DIR) && $(DOCKER_COMPOSE) exec fiap-pos-tech-api-sale-dev npx prisma studio
+
+test-api-sale: ## 🧪 Run Sale API tests
+	@echo "$(BLUE)🧪 Running Sale API tests...$(NC)"
+	@cd $(API_SALE_DIR) && $(DOCKER_COMPOSE) exec fiap-pos-tech-api-sale-dev npm test
 
 ##@ All Services Management
 
-setup-all: network-create setup-auth setup-api setup-api-read ## 🛠️  Setup all services
+setup-all: network-create setup-auth setup-api setup-api-sale ## 🛠️  Setup all services
 	@echo "$(GREEN)✨ All services are set up!$(NC)"
 
 up-all: ## 🚀 Start all services using setup script
@@ -256,12 +285,12 @@ up-all: ## 🚀 Start all services using setup script
 	@./setup-network.sh
 	@echo "$(GREEN)✅ All services started!$(NC)"
 
-down-all: down-api-read down-api down-auth ## 🛑 Stop all services
+down-all: down-api-sale down-api down-auth ## 🛑 Stop all services
 	@echo "$(GREEN)✅ All services stopped!$(NC)"
 
 logs-all: ## 📋 Show logs from all services
 	@echo "$(BLUE)📋 Opening logs in separate terminals...$(NC)"
-	@echo "$(YELLOW)💡 Use 'make logs-auth', 'make logs-api', 'make logs-api-read' individually$(NC)"
+	@echo "$(YELLOW)💡 Use 'make logs-auth', 'make logs-api', 'make logs-api-sale' individually$(NC)"
 
 status-all: ## 📊 Show status of all services
 	@echo "$(BLUE)╔══════════════════════════════════════════════════════════════╗$(NC)"
@@ -274,8 +303,8 @@ status-all: ## 📊 Show status of all services
 	@echo "$(YELLOW)Main API Service:$(NC)"
 	@cd $(API_DIR) && $(DOCKER_COMPOSE) ps 2>/dev/null || echo "$(RED)Not running$(NC)"
 	@echo ""
-	@echo "$(YELLOW)Read API Service:$(NC)"
-	@cd $(API_READ_DIR) && $(DOCKER_COMPOSE) ps 2>/dev/null || echo "$(RED)Not running$(NC)"
+	@echo "$(YELLOW)Sale API Service:$(NC)"
+	@cd $(API_SALE_DIR) && $(DOCKER_COMPOSE) ps 2>/dev/null || echo "$(RED)Not running$(NC)"
 	@echo ""
 
 health-all: ## 🏥 Check health of all services
@@ -288,10 +317,10 @@ health-all: ## 🏥 Check health of all services
 	@curl -s http://localhost:3002/health 2>/dev/null | grep -q "ok" && echo "$(GREEN)✅ Healthy$(NC)" || echo "$(RED)❌ Unhealthy$(NC)"
 	@echo ""
 	@echo "$(YELLOW)Main API:$(NC)"
-	@curl -s http://localhost:3001/api/v1/health 2>/dev/null | grep -q "ok" && echo "$(GREEN)✅ Healthy$(NC)" || echo "$(RED)❌ Unhealthy$(NC)"
+	@curl -s http://localhost:3001/api/v1/health 2>/dev/null | grep -q "UP" && echo "$(GREEN)✅ Healthy$(NC)" || echo "$(RED)❌ Unhealthy$(NC)"
 	@echo ""
-	@echo "$(YELLOW)Read API:$(NC)"
-	@curl -s http://localhost:3003/api/v1/health 2>/dev/null | grep -q "ok" && echo "$(GREEN)✅ Healthy$(NC)" || echo "$(RED)❌ Unhealthy$(NC)"
+	@echo "$(YELLOW)Sale API:$(NC)"
+	@curl -s http://localhost:3003/api/v1/health 2>/dev/null | grep -q "UP" && echo "$(GREEN)✅ Healthy$(NC)" || echo "$(RED)❌ Unhealthy$(NC)"
 	@echo ""
 
 ##@ Database Access
@@ -318,17 +347,17 @@ pull: ## 📥 Pull latest changes from all repositories
 		cd $(API_DIR) && git pull; \
 		echo "$(GREEN)✅ $(API_DIR) updated!$(NC)"; \
 	fi
-	@if [ -d "$(API_READ_DIR)" ]; then \
-		echo "$(YELLOW)Updating $(API_READ_DIR)...$(NC)"; \
-		cd $(API_READ_DIR) && git pull; \
-		echo "$(GREEN)✅ $(API_READ_DIR) updated!$(NC)"; \
+	@if [ -d "$(API_SALE_DIR)" ]; then \
+		echo "$(YELLOW)Updating $(API_SALE_DIR)...$(NC)"; \
+		cd $(API_SALE_DIR) && git pull; \
+		echo "$(GREEN)✅ $(API_SALE_DIR) updated!$(NC)"; \
 	fi
 
 update: pull ## 🔄 Pull changes and rebuild all services
 	@echo "$(BLUE)🔄 Updating all services...$(NC)"
 	@$(MAKE) rebuild-auth
 	@$(MAKE) rebuild-api
-	@$(MAKE) rebuild-api-read
+	@$(MAKE) rebuild-api-sale
 	@echo "$(GREEN)✨ All services updated!$(NC)"
 
 ##@ URLs
@@ -344,8 +373,8 @@ urls: ## 🌐 Display all service URLs
 	@echo "$(GREEN)📡 Main API:$(NC)           http://localhost:3001"
 	@echo "$(GREEN)📡 Main API Swagger:$(NC)   http://localhost:3001/api-docs"
 	@echo ""
-	@echo "$(GREEN)📖 Read API:$(NC)           http://localhost:3003"
-	@echo "$(GREEN)📖 Read API Swagger:$(NC)   http://localhost:3003/api-docs"
+	@echo "$(GREEN)📖 Sale API:$(NC)           http://localhost:3003"
+	@echo "$(GREEN)📖 Sale API Swagger:$(NC)   http://localhost:3003/api-docs"
 	@echo ""
 	@echo "$(GREEN)🔑 Keycloak Admin:$(NC)     http://localhost:8080"
 	@echo "   Username: admin"
@@ -355,9 +384,9 @@ urls: ## 🌐 Display all service URLs
 	@echo "   Database: fiap_pos_tech_db"
 	@echo "   User: fiap_pos_tech_user"
 	@echo ""
-	@echo "$(GREEN)🗄️  PostgreSQL (Read):$(NC)  localhost:5434"
-	@echo "   Database: fiap_read_api_db"
-	@echo "   User: fiap_read_user"
+	@echo "$(GREEN)🗄️  PostgreSQL (Sale):$(NC)  localhost:5434"
+	@echo "   Database: fiap_sale_api_db"
+	@echo "   User: fiap_sale_user"
 	@echo ""
 	@echo "$(GREEN)🗄️  PostgreSQL (KC):$(NC)    localhost:5433 (internal)"
 	@echo "   Database: keycloak"
@@ -366,12 +395,10 @@ urls: ## 🌐 Display all service URLs
 
 ##@ Cleanup
 
-clean: ## 🧹 Remove all containers and networks
+clean: ## 🧹 Stop and remove all containers
 	@echo "$(RED)🧹 Cleaning up Docker resources...$(NC)"
 	@echo "$(YELLOW)⚠️  This will stop and remove all containers!$(NC)"
-	@read -p "Are you sure? (y/N) " -n 1 -r; \
-	echo; \
-	if [[ $$REPLY =~ ^[Yy]$$ ]]; then \
+	@if bash -c 'read -p "Are you sure? (y/N) " -n 1 -r; echo; [[ $$REPLY =~ ^[Yy]$$ ]]'; then \
 		$(MAKE) down-all; \
 		echo "$(GREEN)✅ Cleanup completed!$(NC)"; \
 	else \
@@ -381,12 +408,10 @@ clean: ## 🧹 Remove all containers and networks
 reset: ## 🔄 Complete environment reset
 	@echo "$(RED)🔄 Resetting complete environment...$(NC)"
 	@echo "$(YELLOW)⚠️  This will remove all containers, volumes, and networks!$(NC)"
-	@read -p "Are you sure? (y/N) " -n 1 -r; \
-	echo; \
-	if [[ $$REPLY =~ ^[Yy]$$ ]]; then \
+	@if bash -c 'read -p "Are you sure? (y/N) " -n 1 -r; echo; [[ $$REPLY =~ ^[Yy]$$ ]]'; then \
 		cd $(AUTH_DIR) && $(DOCKER_COMPOSE) --profile dev down -v || true; \
 		cd ../$(API_DIR) && $(DOCKER_COMPOSE) --profile dev down -v || true; \
-		cd ../$(API_READ_DIR) && $(DOCKER_COMPOSE) --profile dev down -v || true; \
+		cd ../$(API_SALE_DIR) && $(DOCKER_COMPOSE) --profile dev down -v || true; \
 		cd ..; \
 		$(MAKE) network-remove; \
 		echo "$(GREEN)✅ Environment reset completed!$(NC)"; \
